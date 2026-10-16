@@ -198,8 +198,9 @@ class AudioEngine(private val context: Context) {
                     .setTransferMode(AudioTrack.MODE_STREAM)
                     .build()
             }
-            track = buildTrack(rate)
-            track.play()
+            var cur: AudioTrack = buildTrack(rate)
+            track = cur
+            cur.play()
             _state.update { it.copy(isPlaying = true, durationMs = durationMs, error = null) }
 
             val info = MediaCodec.BufferInfo()
@@ -221,7 +222,7 @@ class AudioEngine(private val context: Context) {
                     seekToMs = -1L
                     extractor.seekTo(seek * 1000, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
                     codec.flush()
-                    track.flush()
+                    cur.flush()
                     pl.reset()
                     pr.reset()
                     inputDone = false
@@ -230,7 +231,7 @@ class AudioEngine(private val context: Context) {
 
                 if (paused) {
                     if (!wasPaused) {
-                        track.pause()
+                        cur.pause()
                         wasPaused = true
                         analyzer.clear()
                         peakL = 0f
@@ -243,14 +244,14 @@ class AudioEngine(private val context: Context) {
                     continue
                 }
                 if (wasPaused) {
-                    track.play()
+                    cur.play()
                     wasPaused = false
                     _state.update { it.copy(isPlaying = true) }
                 }
 
                 val v = volume
                 if (v != appliedVolume) {
-                    track.setVolume(v)
+                    cur.setVolume(v)
                     appliedVolume = v
                 }
 
@@ -316,7 +317,7 @@ class AudioEngine(private val context: Context) {
                             pcm[2 * i] = (x.coerceIn(-1f, 1f) * 32767f).toInt().toShort()
                             pcm[2 * i + 1] = (y.coerceIn(-1f, 1f) * 32767f).toInt().toShort()
                         }
-                        track.write(pcm, 0, frames * 2)
+                        cur.write(pcm, 0, frames * 2)
 
                         // Visualizer dihitung dari sinyal keluaran (setelah EQ/reverb/polaritas).
                         analyzer.push(l, r, frames)
@@ -348,11 +349,12 @@ class AudioEngine(private val context: Context) {
                     }
                     if (outRate != rate) {
                         rate = outRate
-                        try { track.release() } catch (_: Exception) {}
-                        track = buildTrack(rate)
-                        track.setVolume(volume)
+                        try { cur.release() } catch (_: Exception) {}
+                        cur = buildTrack(rate)
+                        track = cur
+                        cur.setVolume(volume)
                         appliedVolume = volume
-                        if (!paused) track.play()
+                        if (!paused) cur.play()
                         pl = ChannelProcessor(rate.toDouble()).also { it.update(left, muteL) }
                         pr = ChannelProcessor(rate.toDouble(), 23).also { it.update(right, muteR) }
                         procL = pl
@@ -363,7 +365,7 @@ class AudioEngine(private val context: Context) {
             }
 
             if (outputDone && !stopRequested) {
-                track.stop()
+                cur.stop()
             }
         } catch (e: Exception) {
             fail("Gagal memutar: ${e.message ?: e.javaClass.simpleName}")
